@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '**.c'
+      - '**.h'
+      - 'app.manifest'
+      - 'app.rc'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install zig
+        run: pip install ziglang
+
+      - name: Native parser tests (unit + 10k fuzz under ASan+UBSan)
+        run: |
+          chmod +x tests/native/run.sh
+          tests/native/run.sh
+
+      - name: Cross-compile both architectures
+        run: |
+          set -e
+          mkdir -p dist
+
+          EXE_SRC="src/main.c src/capture.c src/config.c src/shared_mem.c src/classifier.c src/icon_data.c"
+          DLL_SRC="src/hook/hook.c src/hook/inject.c"
+
+          build_pair () {
+            local target="$1"
+            local suffix="$2"
+            python3 -m ziglang cc -target "$target" -O2 -Wall \
+              -std=c99 -Iinclude -DUNICODE -D_UNICODE \
+              $EXE_SRC \
+              -lcomctl32 -lshell32 -luser32 -lgdi32 -lole32 \
+              -Wl,--subsystem,windows \
+              -o "dist/kvmapper${suffix}.exe"
+            python3 -m ziglang cc -target "$target" -O2 -Wall -shared \
+              -std=c99 -Iinclude -DUNICODE -D_UNICODE \
+              $DLL_SRC \
+              -luser32 -lkernel32 \
+              -o "dist/kvmapper_hook${suffix}.dll"
+            cp app.manifest "dist/kvmapper${suffix}.exe.manifest"
+          }
+          build_pair x86_64-windows-gnu ""
+          build_pair x86-windows-gnu    "_x86"
+          ls -lh dist/
+
+      - name: Smoke-test the produced PE binaries
+        run: python3 tests/verify_dist.py

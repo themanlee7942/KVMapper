@@ -1,0 +1,48 @@
+/*
+ * app.rc - KVMapper resource script (icon + manifest + version info).
+ *
+ * Compiled with windres on mingw:
+ *   windres app.rc -O coff -o res.o
+ *
+ * If you want to switch to zig's resinator later, beware: it's flaky
+ * in zig 0.16 (see windows-native-cicd §1). MinGW windres is the
+ * reliable choice for now.
+ */
+#include <winuser.h>
+#include <winver.h>
+
+/* Tray icon - id 1 picked up by LoadIcon(MAKEINTRESOURCE(1)) */
+1 ICON "assets/tray.ico"
+
+/* App manifest */
+1 24 "app.manifest"
+
+/* Version info */
+1 VERSIONINFO
+FILEVERSION 0,9,0,0
+PRODUCTVERSION 0,9,0,0
+FILEFLAGSMASK 0x3FL
+FILEFLAGS 0x0L
+FILEOS 0x40004L          /* VOS_NT_WINDOWS32 */
+FILETYPE 0x1L            /* VFT_APP */
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"  /* English (US), Unicode */
+        BEGIN
+            VALUE "CompanyName",      "Jason Lee"
+            VALUE "FileDescription",  "KVMapper - KVM Remote Hotkey Mapper"
+            VALUE "FileVersion",      "0.9.0.0"
+            VALUE "InternalName",     "kvmapper"
+            VALUE "LegalCopyright",   "(c) 2026 Jason Lee. MIT License."
+            VALUE "OriginalFilename", "kvmapper.exe"
+            VALUE "ProductName",      "KVMapper"
+            VALUE "ProductVersion",   "0.9.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

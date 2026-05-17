@@ -1,0 +1,71 @@
+# ── Build outputs ─────────────────────────────────────────────────────
+*.o
+*.obj
+*.res
+*.res.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.tmp*
+.fuse_hidden*
+
+# The dist/ folder is build output — CI rebuilds it from source on every
+# release tag. Don't commit binaries; they go to GitHub Releases.
+dist/
+
+# Zig build/intermediate caches
+.zig-cache/
+zig-out/
+zig-cache/
+
+# Compiled tests / native test scratch
+/tmp/
+tests/native/test
+tests/native/test_unit
+tests/native/test_fuzz
+
+# Legacy build folder
+bin/
+
+# Maintainer-only one-shot setup script (not part of the product)
+bootstrap-github.bat
+bootstrap-*.sh
+
+# Diagnostic / dev-only sources
+*_dryrun.c
+scroll_debug.txt
+
+# ── IDE / editor ──────────────────────────────────────────────────────
+.vs/
+.vscode/
+*.sln
+*.suo
+*.user
+*.swp
+.idea/
+*.code-workspace
+
+# ── OS ────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Local installer / archive scratch (CI generates these and uploads to Releases)
+*.zip
+*.7z
+SHA256SUMS.txt
+
+# Sandbox / FUSE leftovers
+_bash_test.txt
+src/hook/_bash_test.txt
+
+# Internal skill notes - not part of the shipping product
+skills/
+
+# Internal planning doc - not part of the shipping product
+plan.md
+
+# Runtime files KVMapper itself drops next to the exe
+kvmapper_mappings.txt

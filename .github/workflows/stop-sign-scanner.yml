@@ -1,0 +1,103 @@
+name: STOP SIGN scanner
+
+# When a PR modifies source files, check the diff against patterns we
+# have marked as "do not remove without reading the regression note"
+# in tests/regression/. If a guarded pattern is REMOVED in the PR
+# (i.e. the line starts with '-' in the diff), comment with a link to
+# the relevant note so the reviewer pauses.
+#
+# Why this exists: regression archaeology only helps if humans actually
+# read it. Auto-prompting at PR time turns "0% read" into "100% prompted".
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'tests/regression/**'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan diff for guarded patterns
+        id: scan
+        run: |
+          # Each row: <pattern-regex>|<regression-note-filename>|<human-summary>
+          # Patterns are matched against REMOVED lines (diff lines starting with -).
+          PATTERNS_FILE=$(mktemp)
+          cat > "$PATTERNS_FILE" <<'PAT'
+          KV_TLS\s+int\s+g_dispatching|v0.10_autorepeat_collision.md|Removing g_dispatching can cause infinite loops under auto-repeat
+          g_dispatching\s*=\s*1|v0.10_autorepeat_collision.md|inject.c must flip g_dispatching around SendInput
+          KV_VERDICT_RING_SIZE\s+256|v0.10_tick_boundary.md|Shrinking the verdict table can re-introduce slot collisions
+          KV_VERDICT_WINDOW_MS\s+30|v0.10_tick_boundary.md|Tightening the window below ~25ms makes verdict lookups miss across a GetTickCount tick
+          vk\s*\^\s*ts|v0.10_tick_boundary.md|(vk ^ ts) slot indexing is the exact pattern that caused the v0.10 bug
+          DisableThreadLibraryCalls|windows-dll-input-hook|Skill section 6 - keep this in DllMain for perf
+          PAT
+
+          # Get the diff against the base branch
+          BASE_SHA=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          DIFF=$(git diff "$BASE_SHA"..HEAD -- 'src/**' 'include/**')
+
+          HITS_FILE=$(mktemp)
+          while IFS='|' read -r pattern note summary; do
+            [ -z "$pattern" ] && continue
+            # Match REMOVED lines only (start with '-' but not '---')
+            if echo "$DIFF" | grep -E "^-[^-]" | grep -Eq "$pattern"; then
+              echo "- :stop_sign: **\`$pattern\`** appears to have been removed." >> "$HITS_FILE"
+              echo "  - $summary" >> "$HITS_FILE"
+              echo "  - See [\`tests/regression/$note\`](../blob/${{ github.event.pull_request.head.sha }}/tests/regression/$note)" >> "$HITS_FILE"
+              echo "" >> "$HITS_FILE"
+            fi
+          done < "$PATTERNS_FILE"
+
+          if [ -s "$HITS_FILE" ]; then
+            {
+              echo "## :stop_sign: STOP SIGN scanner found removed guards"
+              echo ""
+              echo "This PR appears to remove one or more code patterns that are explicitly guarded by a regression note. Please re-read the note before merging:"
+              echo ""
+              cat "$HITS_FILE"
+              echo ""
+              echo "_If you've read the note and the removal is intentional, leave a comment explaining why so future archaeology has the context._"
+            } > /tmp/comment.md
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "comment_path=/tmp/comment.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post or update review comment
+        if: steps.scan.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/comment.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const marker = '<!-- stop-sign-scanner -->';
+            const fullBody = body + '\n\n' + marker;
+
+            const existing = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100
+            });
+            const ours = existing.data.find(c => c.body && c.body.includes(marker));
+            if (ours) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: ours.id, body: fullBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number, body: fullBody
+              });
+            }
